@@ -1,0 +1,293 @@
+
+# Practical 9: Schedule a DAG in Apache Airflow
+
+### 1. Caption: Check Python and pip versions
+
+Open your Ubuntu/WSL terminal.
+
+    python3 --version
+    python3 -m pip --version
+
+Your current Python version is 3.14.4. We will keep it, but first verify which Airflow release and installation constraints support it.
+
+### 2. Caption: Install required packages
+
+If you are starting from scratch, install the virtual environment package first:
+
+    sudo apt update
+    sudo apt install python3.14-venv -y
+
+If the package is unavailable, stop and check your Ubuntu version rather than repeatedly running the installation.
+
+### 3. Caption: Create and activate a virtual environment
+
+First, check whether the virtual environment already exists:
+
+    ls ~/airflow_venv/bin/activate
+
+**If the virtual environment exists**, activate it:
+
+    source ~/airflow_venv/bin/activate
+
+**If the virtual environment does not exist**, create and activate it:
+
+    python3.14 -m venv ~/airflow_venv
+    source ~/airflow_venv/bin/activate
+
+Your terminal prompt should show `(airflow_venv)`.
+
+### 4. Caption: Install Apache Airflow
+
+Use the official installation method with a constraints URL that matches both the Airflow and Python versions.
+
+Airflow 3.2 and later supports Python 3.14, but you must verify that the selected Airflow release has a corresponding constraints file for your Python version.
+
+First, check whether Airflow is already installed:
+
+    pip show apache-airflow
+
+**If Airflow is already installed**, check its version:
+
+    airflow version
+
+If it works and the installed version is the required version, you can skip the installation.
+
+**If Airflow is not installed**, upgrade pip:
+
+    pip install --upgrade pip
+
+Then install Airflow 3.3.2 using the matching constraints file:
+
+    AIRFLOW_VERSION=3.3.2
+    PYTHON_VERSION="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+    pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${CONSTRAINT_URL}"
+
+Remember: The URL is generated using your Python version. For Python 3.14, it ends in `constraints-3.14.txt`; for Python 3.12, it ends in `constraints-3.12.txt`.
+
+If the constraints file is unavailable, do not repeatedly reinstall Airflow. Check the official compatibility and installation documentation before proceeding.
+
+### 5. Caption: Verify Airflow installation
+
+After installation finishes, run:
+
+    python --version
+    pip show apache-airflow
+    airflow version
+
+Write down the actual versions displayed. Do not assume Airflow installed successfully until `airflow version` works.
+
+### 6. Caption: Configure the Airflow home directory and create the DAG folder
+
+Set the Airflow home directory:
+
+    export AIRFLOW_HOME=~/airflow
+
+Create the DAG folder:
+
+    mkdir -p ~/airflow/dags
+
+Verify that the folder exists:
+
+    ls -ld ~/airflow/dags
+
+### 7. Caption: Create the DAG Python file
+
+Open the editor:
+
+    nano ~/airflow/dags/datetime_dag.py
+
+Paste the following complete code with the indentation preserved:
+
+    import pendulum
+    from airflow.sdk import dag, task
+
+    @dag(
+        dag_id="datetime_dag",
+        schedule="30 9 * * 3",
+        start_date=pendulum.datetime(
+            2026, 1, 1, tz="Asia/Kolkata"
+        ),
+        catchup=False
+    )
+    def date_time():
+
+        @task
+        def show_time():
+            print(pendulum.now("Asia/Kolkata"))
+
+        show_time()
+
+    date_time()
+
+Save the file:
+
+1. Press **Ctrl + O**.
+2. Press **Enter**.
+3. Press **Ctrl + X**.
+
+Important: Use `datetime_dag.py`, not `date&time_dag.py`. In a terminal, `&` has a special meaning, which can cause filename-related errors.
+
+Verify that the file exists:
+
+    ls -l ~/airflow/dags/datetime_dag.py
+
+### 8. Caption: Start the Airflow server on port 8083
+
+If Airflow is already running, stop it first by pressing **Ctrl + C** in the terminal where it is running.
+
+Activate the environment and configure Airflow:
+
+    source ~/airflow_venv/bin/activate
+    export AIRFLOW_HOME=~/airflow
+    export AIRFLOW__API__PORT=8083
+
+Start Airflow:
+
+    airflow standalone
+
+Keep this terminal open. Airflow standalone starts the local services required for the practical.
+
+**To confirm the configured port**, open a second Ubuntu terminal and run:
+
+    source ~/airflow_venv/bin/activate
+    export AIRFLOW_HOME=~/airflow
+    export AIRFLOW__API__PORT=8083
+    airflow config get-value api port
+
+The expected output is:
+
+    8083
+
+If the server fails to start, check the terminal error before attempting to restart or reinstall anything.
+
+### 9. Caption: Open the Airflow Web UI and retrieve the login password
+
+Open Google Chrome in Windows and visit:
+
+**Airflow Dashboard:** `http://localhost:8083`
+
+Log in using the credentials displayed in the terminal when Airflow starts.
+
+**If you need to retrieve the generated password**, open a second Ubuntu terminal and run:
+
+    cat ~/airflow/simple_auth_manager_passwords.json.generated
+
+If that file does not exist, check the Airflow startup output for the generated credentials or password-file path.
+
+Do not share your password publicly or include it in your GitHub repository.
+
+Once logged in, verify that the Airflow dashboard opens successfully.
+
+### 10. Caption: Check whether the DAG is detected
+
+In the second Ubuntu terminal, run:
+
+    source ~/airflow_venv/bin/activate
+    export AIRFLOW_HOME=~/airflow
+    airflow dags list
+
+Search specifically for your DAG:
+
+    airflow dags list | grep datetime_dag
+
+Check for DAG import errors:
+
+    airflow dags list-import-errors
+
+Look for `datetime_dag` in the DAG list. The import-error command should not report an error for your DAG.
+
+If the DAG does not appear, verify the file location, Python indentation, and terminal output before changing the code.
+
+### 11. Caption: Verify the DAG schedule and configuration
+
+Run:
+
+    airflow dags details datetime_dag
+
+Verify the following:
+
+- DAG ID: `datetime_dag`
+- Schedule: `30 9 * * 3`
+- Schedule description: At 09:30, only on Wednesday
+- Time zone: `Asia/Kolkata`, as specified in the DAG's start date
+- Paused status: The DAG should be unpaused before scheduled execution.
+- Import errors: There should be no import error for your DAG.
+
+The schedule `30 9 * * 3` means the DAG is scheduled to run every Wednesday at **9:30 AM Indian Standard Time (IST)**.
+
+The actual next-run date depends on the current date and Airflow's scheduling state.
+
+### 12. Caption: Trigger the DAG and view output
+
+In the Airflow website:
+
+1. Search for `datetime_dag`.
+2. Turn on its toggle to unpause it, if necessary.
+3. Click **Trigger** to run it immediately.
+4. Open the DAG and select **Runs** or **Grid**.
+5. Select the latest run.
+6. Click the `show_time` task.
+7. Open **Logs**.
+
+The task prints the current date and time in the `Asia/Kolkata` time zone.
+
+Expected output will look similar to:
+
+    2026-10-28 18:37:15+05:30
+
+The actual timestamp depends on when the task runs.
+
+**Important:** The timestamp above is only an example. Confirm successful execution using the actual task logs.
+
+If the web interface says **“No logs available for this task,”** check that you selected the task belonging to the latest triggered run and that the run has completed.
+
+If the DAG does not appear in the interface, refresh the page, clear any active filters, and search for `datetime_dag` again.
+
+### 13. Caption: Test the task directly from the terminal
+
+If you want to verify the output without using the browser, run:
+
+    source ~/airflow_venv/bin/activate
+    export AIRFLOW_HOME=~/airflow
+    airflow tasks test datetime_dag show_time 2026-10-28
+
+This executes the task directly and prints its logs in the terminal.
+
+It is useful for testing, but it does not replace triggering a DAG run in the Airflow website.
+
+### 14. Caption: Verify the final practical results
+
+Run the following commands:
+
+    airflow version
+    airflow dags list | grep datetime_dag
+    airflow dags details datetime_dag
+    airflow dags list-import-errors
+
+Confirm that:
+
+1. Apache Airflow is installed and its version is displayed.
+2. The `datetime_dag` DAG is registered.
+3. The DAG uses the Wednesday, 9:30 AM IST schedule.
+4. The DAG has no import error.
+5. The task executes successfully and prints the current date and time.
+6. The Airflow Web UI is accessible at `http://localhost:8083`.
+
+### 15. Screenshots to include in the practical submission
+
+Capture the following evidence:
+
+1. Python and pip versions in the Ubuntu terminal.
+2. Virtual environment activated in the terminal.
+3. Successful Airflow installation and version.
+4. Complete `datetime_dag.py` code.
+5. Airflow standalone running in the terminal.
+6. Airflow Web UI open in the browser.
+7. `datetime_dag` visible in the DAG list.
+8. DAG schedule showing Wednesday at 9:30 AM.
+9. Successful DAG run in the Airflow interface.
+10. `show_time` task logs showing the printed timestamp.
+11. Terminal output showing the DAG details and absence of import errors.
+
+**Result:** Apache Airflow is configured to schedule the `datetime_dag` workflow every Wednesday at 9:30 AM IST. The DAG registration, schedule configuration, and successful task execution should be demonstrated using the terminal output and screenshots described above.
